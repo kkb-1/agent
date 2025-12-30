@@ -184,7 +184,7 @@ func NewAgent(ctx context.Context, config *AgentConfig) (_ *Agent, err error) {
 
 func GetReactGraph(ctx context.Context, config *AgentConfig) (graph *compose.Graph[[]*schema.Message, *schema.Message], t *ToolList, opts []compose.GraphCompileOption, err error) {
 	var (
-		chatModel       model.BaseChatModel
+		chatModel       model.ToolCallingChatModel
 		toolsNode       *compose.ToolsNode
 		toolsConfig     compose.ToolsNodeConfig
 		toolCallChecker = config.StreamToolCallChecker
@@ -209,8 +209,19 @@ func GetReactGraph(ctx context.Context, config *AgentConfig) (graph *compose.Gra
 	if toolCallChecker == nil {
 		toolCallChecker = checkChunkStreamToolCallChecker
 	}
-
 	chatModel = NewLearnModel(ctx, config.ToolCallingModel)
+	infos := make([]*schema.ToolInfo, 0, len(config.ToolsConfig.Tools))
+	for _, tool := range config.ToolsConfig.Tools {
+		info, err := tool.Info(ctx)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		infos = append(infos, info)
+	}
+	chatModel, err = chatModel.WithTools(infos)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	t, err = NewToolList(ctx, config.ToolsConfig.Tools, chatModel)
 	if err != nil {
 		return nil, nil, nil, err
